@@ -24,14 +24,22 @@
     <meta name="defaultLanguage" content="en">
     <meta name="availableLanguages" content="en">
 
-    <title>{% block title_base %}{% block title %}{% endblock %} &middot; {{ request.registry.settings['site.name'] }}{% endblock %}</title>
+    <title>{% block title_base %}{% block title %}{% endblock %}{% if self.title() %} · {% endif %}{{ request.registry.settings['site.name'] }}{% endblock %}</title>
 
-    <link rel="stylesheet" href='//fonts.googleapis.com/css?family=Source+Sans+Pro:400,400italic,600,600italic,700,700italic|Source+Code+Pro:500'>
+    <link rel="stylesheet" href="//fonts.googleapis.com/css?family=Source+Sans+Pro:400,400italic,600,600italic,700,700italic|Source+Code+Pro:500">
     <link rel="stylesheet" href="{{ request.static_path('warehouse:static/dist/components/font-awesome/css/font-awesome.css') }}">
     <link rel="stylesheet" href="{{ request.static_path('warehouse:static/dist/css/main.css') }}">
 
+    <link rel="icon" href="{{ request.static_path('warehouse:static/dist/images/favicon.ico') }}" type="image/x-icon">
+
+    <link rel="alternate" type="application/rss+xml" title="RSS: 40 latest updates" href="{{ request.route_path('rss.updates') }}">
+    <link rel="alternate" type="application/rss+xml" title="RSS: 40 newest packages" href="{{ request.route_path('rss.packages') }}">
+
     <script src="{{ request.static_path('warehouse:static/dist/components/modernizr.js') }}"></script>
-    <script defer src="{{ request.static_path('warehouse:static/dist/components/l20n/dist/compat/web/l20n.js') }}"></script>
+    {# TODO: We need a solution to https://github.com/pypa/warehouse/issues/833
+     #       before we can progress on this. Currently this breaks html_include
+     #}
+    {# <script defer src="{{ request.static_path('warehouse:static/dist/components/l20n/dist/compat/web/l20n.js') }}"></script> #}
   </head>
 
   <body>
@@ -44,7 +52,7 @@
           {% block brand %}
           <div class="split-layout">
             <a class="brand-logo" href="{{ request.route_path('index') }}">
-              <img class="logo" {{ l20n("logo") }} alt="{{ request.registry.settings['site.name'] }}" src="{{ request.static_path('warehouse:static/dist/images/logo-small.png') }}">
+              <img class="logo" {{ l20n("logo") }} alt="{{ request.registry.settings['site.name'] }}" src="{{ request.static_path('warehouse:static/dist/images/logo-small.svg') }}">
             </a>
 
             <form class="search-form -primary" action="{{ request.route_path('search') }}">
@@ -55,7 +63,7 @@
           </div>
           {% endblock %}
 
-          {{ esi_include(request.route_path("esi.current-user-indicator"), cookies=True) }}
+          {{ html_include(request.route_path("includes.current-user-indicator")) }}
         </div>
       </div>
     </header>
@@ -78,29 +86,35 @@
 
     <footer class="footer" role="contentinfo">
       <div class="footer-logo">
-        <img {{ l20n("footerLogo") }} alt="White Cube" src="{{ request.static_path('warehouse:static/dist/images/white-cube.png') }}">
+        <img src="{{ request.static_path('warehouse:static/dist/images/white-cube.svg') }}" alt="Logo" class="-js-white-cube">
       </div>
 
       <div class="footer-links">
         <ul>
-          <li><h3 {{ l20n("getHelp") }}>Get Help</h3></li>
-          <li><a {{ l20n("installingPackages") }} href="TODO">Installing Packages</a></li>
-          <li><a {{ l20n("uploadingPackages") }} href="TODO">Uploading Packages</a></li>
-          <li><a {{ l20n("referenceGuide") }} href="TODO">Reference Guide</a></li>
+          <li>
+            <h3 {{ l20n("getHelp") }}>Get Help</h3>
+          </li>
+          <li><a {{ l20n("installingPackages") }} href="//packaging.python.org/en/latest/installing/">Installing Packages</a></li>
+          <li><a {{ l20n("uploadingPackages") }} href="//packaging.python.org/en/latest/distributing/">Uploading Packages</a></li>
+          <li><a {{ l20n("referenceGuide") }} href="//pip.pypa.io/en/latest/reference/">Reference Guide</a></li>
         </ul>
 
         <ul>
-          <li><h3 {{ l20n("aboutPyPI") }}>About PyPI</h3></li>
+          <li>
+            <h3 {{ l20n("aboutPyPI") }}>About PyPI</h3>
+          </li>
           <li><a href="TODO">Status: Operational</a></li>
           <li><a {{ l20n("securityPolicy") }} href="TODO">Security Policy</a></li>
           <li><a {{ l20n("ourSponsors") }} href="TODO">Our Sponsors</a></li>
         </ul>
 
         <ul>
-          <li><h3 {{ l20n("contributingToPyPI") }}>Contributing to PyPI</h3></li>
-          <li><a {{ l20n("reportABug") }} href="TODO">Report a Bug</a></li>
-          <li><a {{ l20n("contributeOnGithub") }} href="TODO">Contribute on Github</a></li>
-          <li><a {{ l20n("devCredits") }} href="TODO">Development Credits</a></li>
+          <li>
+            <h3 {{ l20n("contributingToPyPI") }}>Contributing to PyPI</h3>
+          </li>
+          <li><a {{ l20n("reportABug") }} href="//github.com/pypa/warehouse/issues">Report a Bug</a></li>
+          <li><a {{ l20n("contributeOnGitHub") }} href="//github.com/pypa/warehouse">Contribute on GitHub</a></li>
+          <li><a {{ l20n("devCredits") }} href="//github.com/pypa/warehouse/graphs/contributors">Development Credits</a></li>
         </ul>
       </div>
 
@@ -108,7 +122,7 @@
 
       <div {{ l20n("developedByAndCopyright") }}>
         <p>Developed and maintained by the Python community, for the Python community.</p>
-        <p>Copyright © 1990-2015, Python Software Foundation. <a href="#">Legal Statements</a></p>
+        <p>© {{ now()|format_date('yyyy') }} Python Software Foundation. <a href="#">Legal Statements</a></p>
       </div>
     </footer>
     {% include "warehouse:templates/includes/sponsors.html" %}

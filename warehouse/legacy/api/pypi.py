@@ -342,8 +342,18 @@ class MetadataForm(forms.Form):
     comment = wtforms.StringField(validators=[wtforms.validators.Optional()])
     md5_digest = wtforms.StringField(
         validators=[
-            wtforms.validators.DataRequired(),
+            wtforms.validators.Optional(),
         ],
+    )
+    sha256_digest = wtforms.StringField(
+        validators=[
+            wtforms.validators.Optional(),
+            wtforms.validators.Regexp(
+                r"^[A-F0-9]{64}$",
+                re.IGNORECASE,
+                message="Must be a valid, hex encoded, SHA256 message digest.",
+            ),
+        ]
     )
 
     # Legacy dependency information
@@ -402,8 +412,8 @@ class MetadataForm(forms.Form):
 
     def full_validate(self):
         # All non source releases *must* have a pyversion
-        if (self.filetype.data
-                and self.filetype.data != "sdist" and not self.pyversion.data):
+        if (self.filetype.data and
+                self.filetype.data != "sdist" and not self.pyversion.data):
             raise wtforms.validators.ValidationError(
                 "Python version is required for binary distribution uploads."
             )
@@ -416,6 +426,12 @@ class MetadataForm(forms.Form):
                 raise wtforms.validators.ValidationError(
                     "The only valid Python version for a sdist is 'source'."
                 )
+
+        # We *must* have at least one digest to verify against.
+        if not self.md5_digest.data and not self.sha256_digest.data:
+            raise wtforms.validators.ValidationError(
+                "Must include at least one message digest.",
+            )
 
 
 _safe_zipnames = re.compile(r"(purelib|platlib|headers|scripts|data).+", re.I)
@@ -697,8 +713,8 @@ def file_upload(request):
         )
 
     # Check the content type of what is being uploaded
-    if (not request.POST["content"].type
-            or request.POST["content"].type.startswith("image/")):
+    if (not request.POST["content"].type or
+            request.POST["content"].type.startswith("image/")):
         raise _exc_with_message(HTTPBadRequest, "Invalid distribution file.")
 
     # Check to see if the file that was uploaded exists already or not.
@@ -731,24 +747,31 @@ def file_upload(request):
         # go along.
         with open(temporary_filename, "wb") as fp:
             file_size = 0
-            file_hash = hashlib.md5()
+            file_hashes = {"md5": hashlib.md5(), "sha256": hashlib.sha256()}
             for chunk in iter(
                     lambda: request.POST["content"].file.read(8096), b""):
                 file_size += len(chunk)
                 if file_size > file_size_limit:
                     raise _exc_with_message(HTTPBadRequest, "File too large.")
                 fp.write(chunk)
-                file_hash.update(chunk)
+                for hasher in file_hashes.values():
+                    hasher.update(chunk)
 
-        # Actually verify that the md5 hash of the file matches the expected
-        # md5 hash. We probably don't actually need to use hmac.compare_digest
-        # here since both the md5_digest and the file whose file_hash we've
-        # computed comes from the remote user, however better safe than sorry.
-        if not hmac.compare_digest(
-                form.md5_digest.data, file_hash.hexdigest()):
+        # Actually verify the digests that we've gotten. We're going to use
+        # hmac.compare_digest even though we probably don't actually need to
+        # because it's better safe than sorry. In the case of multiple digests
+        # we expect them all to be given.
+        if not all([
+            hmac.compare_digest(
+                getattr(form, "{}_digest".format(digest_name)).data.lower(),
+                digest_value.hexdigest().lower(),
+            )
+            for digest_name, digest_value in file_hashes.items()
+            if getattr(form, "{}_digest".format(digest_name)).data
+        ]):
             raise _exc_with_message(
                 HTTPBadRequest,
-                "The MD5 digest supplied does not match a digest calculated "
+                "The digest supplied does not match a digest calculated "
                 "from the uploaded file."
             )
 
@@ -809,7 +832,14 @@ def file_upload(request):
             comment_text=form.comment.data,
             size=file_size,
             has_signature=bool(has_signature),
-            md5_digest=form.md5_digest.data,
+            md5_digest=file_hashes["md5"].hexdigest().lower(),
+            sha256_digest=file_hashes["sha256"].hexdigest().lower(),
+            path="/".join([
+                form.pyversion.data,
+                release.project.name[0],
+                release.project.name,
+                filename,
+            ]),
         )
         request.db.add(file_)
 
@@ -834,11 +864,26 @@ def file_upload(request):
         #       now we'll just ignore it and save it before the transaction is
         #       committed.
         storage = request.find_service(IFileStorage)
-        storage.store(file_.path, os.path.join(tmpdir, filename))
+        storage.store(
+            file_.path,
+            os.path.join(tmpdir, filename),
+            meta={
+                "project": file_.release.project.normalized_name,
+                "version": file_.release.version,
+                "package-type": file_.packagetype,
+                "python-version": file_.python_version,
+            },
+        )
         if has_signature:
             storage.store(
                 file_.pgp_path,
                 os.path.join(tmpdir, filename + ".asc"),
+                meta={
+                    "project": file_.release.project.normalized_name,
+                    "version": file_.release.version,
+                    "package-type": file_.packagetype,
+                    "python-version": file_.python_version,
+                },
             )
 
     return Response()

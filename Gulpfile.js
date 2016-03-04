@@ -1,18 +1,19 @@
-var del = require("del"),
+var cssnano = require("gulp-cssnano"),
+    del = require("del"),
     gulp = require("gulp"),
     gulpSequence = require("gulp-sequence"),
     imagemin = require("gulp-imagemin"),
     imageminOptipng = require("imagemin-optipng"),
     install = require("gulp-install"),
     mainBowerFiles = require("main-bower-files"),
-    minifyCSS = require("gulp-minify-css"),
     modernizr = require("gulp-modernizr"),
     path = require("path"),
     rename = require("gulp-rename"),
     revAll = require("gulp-rev-all"),
     sass = require("gulp-sass"),
     sassLint = require("gulp-sass-lint"),
-    uglify = require("gulp-uglify");
+    uglify = require("gulp-uglify"),
+    sourcemaps = require('gulp-sourcemaps');
 
 
 var srcPaths = {
@@ -29,6 +30,7 @@ var dstPaths = {
   css: "warehouse/static/dist/css",
   images: "warehouse/static/dist/images",
   js: "warehouse/static/dist/js",
+  maps: "warehouse/static/dist/maps"
 }
 
 
@@ -58,7 +60,7 @@ gulp.task("dist:components:js", function() {
 
 gulp.task("dist:components:css", function() {
   return gulp.src(path.join(dstPaths.components, "**", "*.css"))
-             .pipe(minifyCSS({ keepBreaks: true }))
+             .pipe(cssnano({ safe: true }))
              .pipe(gulp.dest(dstPaths.components));
 });
 
@@ -73,8 +75,10 @@ gulp.task("dist:components", function(cb) {
 
 gulp.task("dist:css", function() {
   return gulp.src(path.join(srcPaths.sass, "*.scss"))
+             .pipe(sourcemaps.init())
              .pipe(sass({ includePaths: [srcPaths.sass] }))
-             .pipe(minifyCSS({ keepBreaks: true }))
+             .pipe(cssnano({ safe: true }))
+             .pipe(sourcemaps.write("../maps"))
              .pipe(gulp.dest(dstPaths.css));
 });
 
@@ -93,13 +97,15 @@ gulp.task("dist:images", function() {
 
 gulp.task("dist:js", function() {
   return gulp.src(path.join(srcPaths.js, "**", "*"))
+             .pipe(sourcemaps.init())
              .pipe(uglify({ preserveComments: "license" }))
+             .pipe(sourcemaps.write("../maps"))
              .pipe(gulp.dest(dstPaths.js));
 });
 
 gulp.task("dist:modernizr", function() {
   return gulp.src(path.join(dstPaths.js, "**", "*.js"))
-             .pipe(modernizr())
+             .pipe(modernizr({ options : ["setClasses"] }))
              .pipe(uglify({ preserveComments: "license" }))
              .pipe(gulp.dest(dstPaths.components));
 });

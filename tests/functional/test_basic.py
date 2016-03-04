@@ -20,7 +20,7 @@ def test_robots_txt(webtest):
         "User-agent: *\n"
         "Disallow: /simple/\n"
         "Disallow: /packages/\n"
-        "Disallow: /_esi/\n"
+        "Disallow: /_includes/\n"
         "Disallow: /pypi/*/json\n"
         "Disallow: /pypi/*/*/json\n"
         "Disallow: /pypi*?\n"

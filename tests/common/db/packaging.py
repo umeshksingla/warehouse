@@ -49,11 +49,23 @@ class FileFactory(WarehouseFactory):
 
     name = factory.LazyAttribute(lambda o: o.release.name)
     release = factory.SubFactory(ReleaseFactory)
+    python_version = "source"
     md5_digest = factory.LazyAttribute(
         lambda o: hashlib.md5(o.filename.encode("utf8")).hexdigest()
     )
+    sha256_digest = factory.LazyAttribute(
+        lambda o: hashlib.sha256(o.filename.encode("utf8")).hexdigest()
+    )
     upload_time = factory.fuzzy.FuzzyNaiveDateTime(
         datetime.datetime(2008, 1, 1)
+    )
+    path = factory.LazyAttribute(
+        lambda o: "/".join([
+            o.python_version,
+            o.release.project.name[0],
+            o.release.project.name,
+            o.filename,
+        ])
     )
 
 

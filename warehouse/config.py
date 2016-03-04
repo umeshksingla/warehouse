@@ -236,15 +236,17 @@ def configure(settings=None):
 
     # We'll want to configure some filters for Jinja2 as well.
     filters = config.get_settings().setdefault("jinja2.filters", {})
+    filters.setdefault("format_tags", "warehouse.filters:format_tags")
     filters.setdefault("json", "warehouse.filters:tojson")
-    filters.setdefault("readme", "warehouse.filters:readme_renderer")
+    filters.setdefault("readme", "warehouse.filters:readme")
     filters.setdefault("shorten_number", "warehouse.filters:shorten_number")
     filters.setdefault("urlparse", "warehouse.filters:urlparse")
 
     # We also want to register some global functions for Jinja
     jglobals = config.get_settings().setdefault("jinja2.globals", {})
     jglobals.setdefault("gravatar", "warehouse.utils.gravatar:gravatar")
-    jglobals.setdefault("esi_include", "warehouse.cache.origin:esi_include")
+    jglobals.setdefault("html_include", "warehouse.utils.html:html_include")
+    jglobals.setdefault("now", "warehouse.utils:now")
 
     # We'll store all of our templates in one location, warehouse/templates
     # so we'll go ahead and add that to the Jinja2 search path.

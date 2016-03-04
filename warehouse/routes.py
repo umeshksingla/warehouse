@@ -22,17 +22,10 @@ def includeme(config):
         read_only=True,
     )
 
-    # ESI Routes
+    # HTML Snippets for including into other pages.
     config.add_route(
-        "esi.current-user-indicator",
-        "/_esi/current-user-indicator/",
-        read_only=True,
-    )
-    config.add_route(
-        "esi.project-stats",
-        "/_esi/project-stats/{name}/",
-        factory="warehouse.packaging.models:ProjectFactory",
-        traverse="/{name}",
+        "includes.current-user-indicator",
+        "/_includes/current-user-indicator/",
         read_only=True,
     )
 
@@ -66,6 +59,10 @@ def includeme(config):
         read_only=True,
     )
     config.add_route("packaging.file", "/packages/{path:.*}", read_only=True)
+
+    # RSS
+    config.add_route("rss.updates", "/rss/updates.xml", read_only=True)
+    config.add_route("rss.packages", "/rss/packages.xml", read_only=True)
 
     # Legacy URLs
     config.add_route("legacy.api.simple.index", "/simple/", read_only=True)
@@ -118,3 +115,7 @@ def includeme(config):
         "/pypi/{name}/{version}/",
         "/project/{name}/{version}/",
     )
+
+    # Legacy Action Redirects
+    config.add_pypi_action_redirect("rss", "/rss/updates.xml")
+    config.add_pypi_action_redirect("packages_rss", "/rss/packages.xml")

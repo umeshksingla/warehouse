@@ -10,6 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
 import io
 import os.path
 import tempfile
@@ -296,8 +297,25 @@ class TestMetadataForm:
     @pytest.mark.parametrize(
         "data",
         [
-            {"filetype": "sdist"},
-            {"filetpye": "bdist_wheel", "pyversion": "3.4"},
+            {"filetype": "sdist", "md5_digest": "bad"},
+            {
+                "filetpye": "bdist_wheel",
+                "pyversion": "3.4",
+                "md5_digest": "bad",
+            },
+            {"filetype": "sdist", "sha256_digest": "bad"},
+            {
+                "filetpye": "bdist_wheel",
+                "pyversion": "3.4",
+                "sha256_digest": "bad",
+            },
+            {"filetype": "sdist", "md5_digest": "bad", "sha256_digest": "bad"},
+            {
+                "filetpye": "bdist_wheel",
+                "pyversion": "3.4",
+                "md5_digest": "bad",
+                "sha256_digest": "bad",
+            },
         ],
     )
     def test_full_validate_valid(self, data):
@@ -488,6 +506,7 @@ class TestFileUpload:
                     "metadata_version": "1.2",
                     "name": "example",
                     "version": "1.0",
+                    "md5_digest": "bad",
                 },
                 "filetype: This field is required.",
             ),
@@ -508,6 +527,7 @@ class TestFileUpload:
                     "version": "1.0",
                     "filetype": "bdist_wat",
                     "pyversion": "1.0",
+                    "md5_digest": "bad",
                 },
                 "filetype: Unknown type of file.",
             ),
@@ -523,7 +543,7 @@ class TestFileUpload:
                 "'source'.",
             ),
 
-            # md5_digest errors.
+            # digest errors.
             (
                 {
                     "metadata_version": "1.2",
@@ -531,7 +551,7 @@ class TestFileUpload:
                     "version": "1.0",
                     "filetype": "sdist",
                 },
-                "md5_digest: This field is required.",
+                "__all__: Must include at least one message digest.",
             ),
 
             # summary errors
@@ -624,9 +644,53 @@ class TestFileUpload:
 
         assert "name" not in db_request.POST
 
-    @pytest.mark.parametrize("has_signature", [True, False])
+    @pytest.mark.parametrize(
+        ("has_signature", "digests"),
+        [
+            (True, {"md5_digest": "335c476dc930b959dda9ec82bd65ef19"}),
+            (
+                True,
+                {
+                    "sha256_digest": (
+                        "4a8422abcc484a4086bdaa618c65289f749433b07eb433c51c4e3"
+                        "77143ff5fdb"
+                    ),
+                },
+            ),
+            (False, {"md5_digest": "335c476dc930b959dda9ec82bd65ef19"}),
+            (
+                False,
+                {
+                    "sha256_digest": (
+                        "4a8422abcc484a4086bdaa618c65289f749433b07eb433c51c4e3"
+                        "77143ff5fdb"
+                    ),
+                },
+            ),
+            (
+                True,
+                {
+                    "md5_digest": "335c476dc930b959dda9ec82bd65ef19",
+                    "sha256_digest": (
+                        "4a8422abcc484a4086bdaa618c65289f749433b07eb433c51c4e3"
+                        "77143ff5fdb"
+                    ),
+                },
+            ),
+            (
+                False,
+                {
+                    "md5_digest": "335c476dc930b959dda9ec82bd65ef19",
+                    "sha256_digest": (
+                        "4a8422abcc484a4086bdaa618c65289f749433b07eb433c51c4e3"
+                        "77143ff5fdb"
+                    ),
+                },
+            ),
+        ],
+    )
     def test_successful_upload(self, tmpdir, monkeypatch, pyramid_config,
-                               db_request, has_signature):
+                               db_request, has_signature, digests):
         monkeypatch.setattr(tempfile, "tempdir", str(tmpdir))
 
         pyramid_config.testing_securitypolicy(userid=1)
@@ -649,7 +713,6 @@ class TestFileUpload:
             "version": release.version,
             "filetype": "sdist",
             "pyversion": "source",
-            "md5_digest": "335c476dc930b959dda9ec82bd65ef19",
             "content": pretend.stub(
                 filename=filename,
                 file=io.BytesIO(b"A fake file."),
@@ -659,6 +722,7 @@ class TestFileUpload:
         db_request.POST.extend([
             ("classifiers", "Environment :: Other Environment"),
         ])
+        db_request.POST.update(digests)
 
         if has_signature:
             db_request.POST["gpg_signature"] = pretend.stub(
@@ -670,7 +734,7 @@ class TestFileUpload:
             )
 
         @pretend.call_recorder
-        def storage_service_store(path, file_path):
+        def storage_service_store(path, file_path, *, meta):
             if file_path.endswith(".asc"):
                 expected = (
                     b"-----BEGIN PGP SIGNATURE-----\n"
@@ -700,6 +764,12 @@ class TestFileUpload:
                 filename,
             ),
             mock.ANY,
+            meta={
+                "project": project.normalized_name,
+                "version": release.version,
+                "package-type": "sdist",
+                "python-version": "source",
+            },
         )
 
         if has_signature:
@@ -711,6 +781,12 @@ class TestFileUpload:
                     filename + ".asc",
                 ),
                 mock.ANY,
+                meta={
+                    "project": project.normalized_name,
+                    "version": release.version,
+                    "package-type": "sdist",
+                    "python-version": "source",
+                },
             )
 
         # Ensure that a File object has been created.
@@ -860,7 +936,41 @@ class TestFileUpload:
             "valid choice for this field"
         )
 
-    def test_upload_fails_with_invalid_hash(self, pyramid_config, db_request):
+    @pytest.mark.parametrize(
+        "digests",
+        [
+            {"md5_digest": "bad"},
+            {
+                "sha256_digest": (
+                    "badbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbad"
+                    "badbadb"
+                ),
+            },
+            {
+                "md5_digest": "bad",
+                "sha256_digest": (
+                    "badbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbad"
+                    "badbadb"
+                ),
+            },
+            {
+                "md5_digest": "335c476dc930b959dda9ec82bd65ef19",
+                "sha256_digest": (
+                    "badbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbad"
+                    "badbadb"
+                ),
+            },
+            {
+                "md5_digest": "bad",
+                "sha256_digest": (
+                    "4a8422abcc484a4086bdaa618c65289f749433b07eb433c51c4e37714"
+                    "3ff5fdb"
+                ),
+            },
+        ],
+    )
+    def test_upload_fails_with_invalid_digest(self, pyramid_config, db_request,
+                                              digests):
         pyramid_config.testing_securitypolicy(userid=1)
 
         user = UserFactory.create()
@@ -875,13 +985,13 @@ class TestFileUpload:
             "name": project.name,
             "version": release.version,
             "filetype": "sdist",
-            "md5_digest": "nope!",
             "content": pretend.stub(
                 filename=filename,
                 file=io.BytesIO(b"A fake file."),
                 type="application/tar",
             ),
         })
+        db_request.POST.update(digests)
 
         with pytest.raises(HTTPBadRequest) as excinfo:
             pypi.file_upload(db_request)
@@ -890,7 +1000,7 @@ class TestFileUpload:
 
         assert resp.status_code == 400
         assert resp.status == (
-            "400 The MD5 digest supplied does not match a digest calculated "
+            "400 The digest supplied does not match a digest calculated "
             "from the uploaded file."
         )
 
@@ -1053,7 +1163,19 @@ class TestFileUpload:
             ),
         })
 
-        db_request.db.add(File(release=release, filename=filename))
+        db_request.db.add(
+            File(
+                release=release,
+                filename=filename,
+                sha256_digest=hashlib.sha256(
+                    filename.encode("utf8")
+                ).hexdigest(),
+                path="source/{name[0]}/{name}/{filename}".format(
+                    name=project.name,
+                    filename=filename,
+                ),
+            ),
+        )
 
         with pytest.raises(HTTPBadRequest) as excinfo:
             pypi.file_upload(db_request)
@@ -1231,7 +1353,7 @@ class TestFileUpload:
         })
 
         @pretend.call_recorder
-        def storage_service_store(path, file_path):
+        def storage_service_store(path, file_path, *, meta):
             with open(file_path, "rb") as fp:
                 assert fp.read() == b"A fake file."
 
@@ -1255,6 +1377,12 @@ class TestFileUpload:
                     filename,
                 ),
                 mock.ANY,
+                meta={
+                    "project": project.normalized_name,
+                    "version": release.version,
+                    "package-type": "bdist_wheel",
+                    "python-version": "cp34",
+                },
             ),
         ]
 
@@ -1369,7 +1497,7 @@ class TestFileUpload:
             ("provides", "testing"),
         ])
 
-        storage_service = pretend.stub(store=lambda path, content: None)
+        storage_service = pretend.stub(store=lambda path, filepath, meta: None)
         db_request.find_service = lambda svc: storage_service
 
         resp = pypi.file_upload(db_request)
@@ -1450,7 +1578,7 @@ class TestFileUpload:
             ),
         })
 
-        storage_service = pretend.stub(store=lambda path, content: None)
+        storage_service = pretend.stub(store=lambda path, filepath, meta: None)
         db_request.find_service = lambda svc: storage_service
         db_request.client_addr = "10.10.10.10"
 

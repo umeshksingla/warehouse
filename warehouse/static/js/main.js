@@ -1,51 +1,58 @@
 $(document).ready(function() {
 
+  // Look for any data-html-include elements, and include the content for them
+  $('[data-html-include]').each(function() {
+    $(this).load($(this).data('html-include'));
+  });
+
   // Toggle expanding and collapsing sections
-  $('.expander-trigger').click(function(){
+  $('.-js-expander-trigger').click(function(){
     $(this).toggleClass("expander-hidden");
   });
 
-  $(".js-vertical-tab-content").hide();
-  $(".js-vertical-tab-content:first").show();
+  function setTab(tab) {
+    if (tab) {
+      $(".js-vertical-tab-content").hide();
+      tab.show();
+      $(".is-active").removeClass("is-active");
+      $("a[href^='#"+tab[0].id+"']").addClass("is-active");
+    }
+  }
 
-  /* if in tab mode */
-  $(".js-vertical-tab").click(function(event) {
+  function getTab(selector) {
+    tab = $(".js-vertical-tab-content" + selector);
+    return (selector && tab.length) ? tab : null;
+  }
+
+  window.onhashchange = function() {
+    setTab(getTab(location.hash));
+  };
+
+  // Set the tab if the hash is valid, otherwise show the first tab
+  setTab(getTab(location.hash) || getTab(":first"));
+
+  // If in tab mode
+  $(".-js-vertical-tab").click(function(event) {
     event.preventDefault();
-
-    $(".js-vertical-tab-content").hide();
-    var activeTab = $(this).attr("rel");
-    $("#"+activeTab).show();
-
-    $(".js-vertical-tab").removeClass("is-active");
-    $(this).addClass("is-active");
-
-    $(".js-vertical-tab-accordion-heading").removeClass("is-active");
-    $(".js-vertical-tab-accordion-heading[rel^='"+activeTab+"']").addClass("is-active");
+    history.pushState(null, '', $(this).attr("href"));
+    setTab(getTab(location.hash));
   });
 
-  /* if in accordion mode */
-  $(".js-vertical-tab-accordion-heading").click(function(event) {
+  // If in accordion mode
+  $(".-js-vertical-tab-accordion-heading").click(function(event) {
     event.preventDefault();
-
-    $(".js-vertical-tab-content").hide();
-    var accordion_activeTab = $(this).attr("rel");
-    $("#"+accordion_activeTab).show();
-
-    $(".js-vertical-tab-accordion-heading").removeClass("is-active");
-    $(this).addClass("is-active");
-
-    $(".js-vertical-tab").removeClass("is-active");
-    $(".js-vertical-tab[rel^='"+accordion_activeTab+"']").addClass("is-active");
+    history.pushState(null, '', $(this).attr("href"));
+    setTab(getTab(location.hash));
   });
 
   // Launch filter popover on mobile
-  $('body').on('click', '.add-filter', function(e){
+  $('body').on('click', '.-js-add-filter', function(e){
     e.preventDefault();
     $('.dark-overlay').show();
     $('.panel-overlay').show();
   });
 
-  $('body').on('click', '.close-panel', function(e){
+  $('body').on('click', '.-js-close-panel', function(e){
     e.preventDefault();
     $('.dark-overlay').hide();
     $('.panel-overlay').hide();
@@ -63,9 +70,12 @@ $(document).ready(function() {
     positionWarning();
   });
 
-  document.l10n.ready.then(function() {
-    // Format all of the time.relative tags to display relative time.
-    $(".-js-relative-time").timeago();
-  });
+  $.timeago.settings.cutoff = 7 * 24 * 60 * 60 * 1000;  // One week
+
+  // document.l10n.ready.then(function() {
+  //   // Format all of the time.relative tags to display relative time.
+  //   $(".-js-relative-time").timeago();
+  // });
+  $(".-js-relative-time").timeago();  // Add back to document.l10n.ready
 
 });
